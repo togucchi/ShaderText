@@ -36,10 +36,16 @@ namespace ShaderText.Samples
 
                 float ms = 1000f / Mathf.Max(_lastFps, 0.001f);
 
-                // Example output: "FPS:120  8.3MS"
-                string fps = ((int)_lastFps).ToString();
-                string msStr = ms.ToString("F1");
-                _renderer.Text = $"FPS:{fps} {msStr}MS";
+                // Zero-GC text update — no string allocation
+                // Example output: "FPS:120 8.3MS"
+                int pos = 0;
+                pos += _renderer.WriteString("FPS:", pos);
+                pos += _renderer.WriteInt((int)_lastFps, pos);
+                pos += _renderer.WriteString(" ", pos);
+                pos += _renderer.WriteFloat(ms, 1, pos);
+                pos += _renderer.WriteString("MS", pos);
+                _renderer.ClearChars(pos);
+                _renderer.Apply();
             }
         }
     }

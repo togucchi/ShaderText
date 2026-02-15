@@ -79,7 +79,59 @@ Inherits from `UnityEngine.UI.MaskableGraphic`.
 | `CharacterHeight` | `float` | `24` | Height of each character in pixels. |
 | `CharacterSpacing` | `float` | `2` | Horizontal gap between characters in pixels. |
 
+| Method | Return | Description |
+|--------|--------|-------------|
+| `SetChar(int index, char c)` | `void` | Set a single character at the given slot. Does not upload to GPU. |
+| `ClearChars(int startIndex = 0)` | `void` | Fill slots from `startIndex` onward with blank. |
+| `Apply()` | `void` | Upload buffer changes to the GPU. |
+| `WriteInt(int value, int startIndex = 0)` | `int` | Write an integer without string allocation. Returns characters written. |
+| `WriteFloat(float value, int decimals, int startIndex = 0)` | `int` | Write a float without string allocation. Returns characters written. |
+| `WriteString(string text, int startIndex = 0)` | `int` | Write each character of a string. Returns characters written. |
+
 Standard `MaskableGraphic` properties (`color`, `raycastTarget`, etc.) are also available.
+
+## Zero-GC Usage
+
+The `Text` property accepts a `string`, which causes GC allocation when using `ToString()` or string interpolation every frame. For performance-critical scenarios (e.g., FPS counters updated every frame), use the zero-GC API instead:
+
+```csharp
+// ❌ Allocates strings every call (GC pressure)
+renderer.Text = $"FPS:{fps} {ms:F1}MS";
+
+// ✅ Zero-GC — writes directly to the GPU buffer
+int pos = 0;
+pos += renderer.WriteString("FPS:", pos);
+pos += renderer.WriteInt(fpsValue, pos);
+pos += renderer.WriteString(" ", pos);
+pos += renderer.WriteFloat(msValue, 1, pos);
+pos += renderer.WriteString("MS", pos);
+renderer.ClearChars(pos);   // blank remaining slots
+renderer.Apply();            // upload to GPU
+```
+
+### Pattern: SetChar + Apply
+
+For single-character updates:
+
+```csharp
+renderer.SetChar(0, 'A');
+renderer.SetChar(1, '1');
+renderer.ClearChars(2);
+renderer.Apply();
+```
+
+### Pattern: WriteInt + WriteFloat
+
+`WriteInt` and `WriteFloat` return the number of characters written, making it easy to chain calls:
+
+```csharp
+int pos = 0;
+pos += renderer.WriteInt(score, pos);      // e.g. "12345"
+pos += renderer.WriteString(" ", pos);     // separator
+pos += renderer.WriteFloat(time, 2, pos);  // e.g. "3.14"
+renderer.ClearChars(pos);
+renderer.Apply();
+```
 
 ## How It Works
 
@@ -116,16 +168,18 @@ Standard `MaskableGraphic` properties (`color`, `raycastTarget`, etc.) are also 
 
 ### Performance Counter
 
-A real-time FPS and frame time display. Import via **Package Manager > Shader Text > Samples > Performance Counter**.
+A real-time FPS and frame time display with zero GC allocation. Import via **Package Manager > Shader Text > Samples > Performance Counter**.
 
 ```csharp
-// Output example: "FPS:120 8.3MS"
-[RequireComponent(typeof(ShaderTextRenderer))]
-public class PerformanceCounter : MonoBehaviour
-{
-    [SerializeField] private float _updateInterval = 0.25f;
-    // ...
-}
+// Output example: "FPS:120 8.3MS"  (zero GC allocation)
+int pos = 0;
+pos += _renderer.WriteString("FPS:", pos);
+pos += _renderer.WriteInt((int)fps, pos);
+pos += _renderer.WriteString(" ", pos);
+pos += _renderer.WriteFloat(ms, 1, pos);
+pos += _renderer.WriteString("MS", pos);
+_renderer.ClearChars(pos);
+_renderer.Apply();
 ```
 
 ## License
