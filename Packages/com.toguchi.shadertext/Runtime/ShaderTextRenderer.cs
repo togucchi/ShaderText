@@ -42,6 +42,7 @@ namespace ShaderText
                 if (_maxCharacters == value) return;
                 _maxCharacters = value;
                 RebuildBuffer();
+                ApplyCharData();
                 SetVerticesDirty();
             }
         }
@@ -309,7 +310,7 @@ namespace ShaderText
             }
 
             _bufferDirty = true;
-            return pos - startIndex;
+            return Mathf.Max(0, Mathf.Min(pos, len) - startIndex);
         }
 
         /// <summary>
@@ -318,6 +319,7 @@ namespace ShaderText
         public int WriteFloat(float value, int decimals, int startIndex = 0)
         {
             if (_charIndices == null) return 0;
+            decimals = Mathf.Clamp(decimals, 0, 10);
 
             int pos = startIndex;
             int len = _charIndices.Length;
@@ -372,7 +374,7 @@ namespace ShaderText
             }
 
             _bufferDirty = true;
-            return pos - startIndex;
+            return Mathf.Max(0, Mathf.Min(pos, len) - startIndex);
         }
 
         /// <summary>
@@ -384,15 +386,17 @@ namespace ShaderText
 
             int len = _charIndices.Length;
             int count = text.Length;
+            int written = 0;
             for (int i = 0; i < count; i++)
             {
                 int idx = startIndex + i;
                 if ((uint)idx >= (uint)len) break;
                 _charIndices[idx] = CharToIndex(text[i]);
+                written++;
             }
 
             _bufferDirty = true;
-            return count;
+            return written;
         }
 
         private int WritePositiveLong(long value, int pos, int bufferLen)
