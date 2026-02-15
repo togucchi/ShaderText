@@ -1,0 +1,16 @@
+{
+    "name": "ShaderText.Sample",
+    "rootNamespace": "",
+    "references": [
+        "GUID:24cc5defb06744d53b83ea43c290fe1c"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
