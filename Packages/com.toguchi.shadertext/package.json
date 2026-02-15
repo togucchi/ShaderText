@@ -1,0 +1,24 @@
+{
+  "name": "com.toguchi.shadertext",
+  "version": "0.1.0",
+  "displayName": "Shader Text",
+  "description": "Texture-free text rendering using in-shader bitmap fonts. Designed for debug overlays with zero mesh rebuild on text updates.",
+  "unity": "2021.3",
+  "keywords": [
+    "text",
+    "shader",
+    "debug",
+    "ui",
+    "performance"
+  ],
+  "author": {
+    "name": "toguchi"
+  },
+  "samples": [
+    {
+      "displayName": "Performance Counter",
+      "description": "FPS and memory counter using ShaderTextRenderer",
+      "path": "Samples~/PerformanceCounter"
+    }
+  ]
+}
