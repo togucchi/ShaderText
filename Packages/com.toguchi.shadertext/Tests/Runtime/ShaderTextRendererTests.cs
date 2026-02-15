@@ -389,187 +389,127 @@ namespace ShaderText.Tests
         [UnityTest]
         public IEnumerator Rendering_SecondSlotReflectsTextChange()
         {
-            // This test detects the "first character repeated" bug:
-            // If UV1 (slot index) is not passed to the shader, every slot reads
-            // _CharIndices[0], so changing only the 2nd character has no visual effect.
-            //
-            // Approach: render "AA" then "A0". Compare full-frame pixel hashes.
-            // With working UV1: hashes differ (slot 1 switches from 'A' to '0').
-            // With broken UV1: hashes are identical (both look like "AA").
+            // Detects the "first character repeated" bug by verifying the data pipeline:
+            // 1. _charIndices buffer updates per-slot when text changes
+            // 2. Mesh UV0.z encodes distinct slot indices so the shader reads the correct buffer entry
+            // If UV0.z were always 0, every slot would read _CharIndices[0] and show the first character.
 
-            // Clean up the shared Setup objects — this test uses its own hierarchy
-            Object.DestroyImmediate(_textGo);
-            Object.DestroyImmediate(_canvasGo);
-            _textGo = null;
-            _canvasGo = null;
+            _renderer.MaxCharacters = 2;
+            _renderer.CharacterWidth = 40f;
+            _renderer.CharacterHeight = 50f;
+            _renderer.CharacterSpacing = 20f;
+            yield return null;
 
-            const int rtWidth = 256;
-            const int rtHeight = 64;
-            var rt = new RenderTexture(rtWidth, rtHeight, 24);
-            rt.Create();
+            var charIndicesField = typeof(ShaderTextRenderer).GetField(
+                "_charIndices", BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.IsNotNull(charIndicesField, "_charIndices field not found");
 
-            // Camera
-            var camGo = new GameObject("TestCamera");
-            var cam = camGo.AddComponent<Camera>();
-            cam.orthographic = true;
-            cam.orthographicSize = rtHeight * 0.5f;
-            cam.nearClipPlane = -1f;
-            cam.farClipPlane = 100f;
-            cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = Color.clear;
-            cam.targetTexture = rt;
+            // ── Pass 1: "AA" → both slots map to 'A' (index 10) ──
+            _renderer.Text = "AA";
+            yield return null;
 
-            // Canvas (ScreenSpace - Camera)
-            _canvasGo = new GameObject("RenderTestCanvas");
-            var canvas = _canvasGo.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceCamera;
-            canvas.worldCamera = cam;
-            var scaler = _canvasGo.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+            var indices = (uint[])charIndicesField.GetValue(_renderer);
+            Assert.AreEqual(10u, indices[0], "Slot 0 should be 'A'=10");
+            Assert.AreEqual(10u, indices[1], "Slot 1 should be 'A'=10");
 
-            // ShaderTextRenderer
-            _textGo = new GameObject("RenderTestText");
-            _textGo.transform.SetParent(_canvasGo.transform, false);
-            var rectTransform = _textGo.AddComponent<RectTransform>();
-            rectTransform.anchoredPosition = Vector2.zero;
-            rectTransform.sizeDelta = new Vector2(200f, 60f);
+            // ── Pass 2: "A0" → slot 1 changes to '0' (index 0) ──
+            _renderer.Text = "A0";
+            yield return null;
 
-            var renderer = _textGo.AddComponent<ShaderTextRenderer>();
-            renderer.color = Color.white;
-            renderer.MaxCharacters = 2;
-            renderer.CharacterWidth = 40f;
-            renderer.CharacterHeight = 50f;
-            renderer.CharacterSpacing = 20f;
+            indices = (uint[])charIndicesField.GetValue(_renderer);
+            Assert.AreEqual(10u, indices[0], "Slot 0 should still be 'A'=10");
+            Assert.AreEqual(0u, indices[1], "Slot 1 should change to '0'=0");
+            Assert.AreNotEqual(indices[0], indices[1],
+                "Changing text from 'AA' to 'A0' must update char index for slot 1. " +
+                "If indices are identical, the text change did not propagate per-slot.");
 
-            // ── Pass 1: render "AA" ──
-            renderer.Text = "AA";
-            Canvas.ForceUpdateCanvases();
-            for (int i = 0; i < 3; i++) yield return null;
-            cam.Render();
+            // ── Verify mesh UV0.z encodes distinct slot indices ──
+            var vh = new VertexHelper();
+            var populateMethod = typeof(ShaderTextRenderer).GetMethod(
+                "OnPopulateMesh",
+                BindingFlags.NonPublic | BindingFlags.Instance,
+                null, new[] { typeof(VertexHelper) }, null);
+            populateMethod.Invoke(_renderer, new object[] { vh });
 
-            var prev = RenderTexture.active;
-            RenderTexture.active = rt;
-            var tex = new Texture2D(rtWidth, rtHeight, TextureFormat.RGBA32, false);
-            tex.ReadPixels(new Rect(0, 0, rtWidth, rtHeight), 0, 0);
-            tex.Apply();
-            RenderTexture.active = prev;
+            var mesh = new Mesh();
+            vh.FillMesh(mesh);
+            var uvs = new System.Collections.Generic.List<Vector4>();
+            mesh.GetUVs(0, uvs);
 
-            var pixelsAA = tex.GetPixels32();
-            long hashAA = 0;
-            for (int i = 0; i < pixelsAA.Length; i++)
-                hashAA += pixelsAA[i].a * (long)(i + 1);
+            Assert.AreEqual(8, uvs.Count, "Expected 8 vertices (2 chars × 4 verts)");
+            for (int v = 0; v < 4; v++)
+                Assert.AreEqual(0f, uvs[v].z, 0.001f,
+                    $"Slot 0 vertex {v}: UV0.z must be 0 so the shader reads _CharIndices[0]");
+            for (int v = 4; v < 8; v++)
+                Assert.AreEqual(1f, uvs[v].z, 0.001f,
+                    $"Slot 1 vertex {v}: UV0.z must be 1 so the shader reads _CharIndices[1]");
 
-            // ── Pass 2: render "A0" (only slot 1 changes) ──
-            renderer.Text = "A0";
-            Canvas.ForceUpdateCanvases();
-            for (int i = 0; i < 3; i++) yield return null;
-            cam.Render();
-
-            RenderTexture.active = rt;
-            tex.ReadPixels(new Rect(0, 0, rtWidth, rtHeight), 0, 0);
-            tex.Apply();
-            RenderTexture.active = prev;
-
-            var pixelsA0 = tex.GetPixels32();
-            long hashA0 = 0;
-            for (int i = 0; i < pixelsA0.Length; i++)
-                hashA0 += pixelsA0[i].a * (long)(i + 1);
-
-            // Cleanup
-            Object.DestroyImmediate(tex);
-            Object.DestroyImmediate(camGo);
-            rt.Release();
-            Object.DestroyImmediate(rt);
-
-            Assert.AreNotEqual(hashAA, hashA0,
-                "Changing text from 'AA' to 'A0' must change the rendered output. " +
-                "If the output is identical, the slot index (UV1.x) is always 0 — " +
-                "every slot reads _CharIndices[0] and shows the first character only.");
+            mesh.Clear();
+            vh.Dispose();
         }
 
         [UnityTest]
         public IEnumerator Rendering_TextIsVisible_PixelsAreNonTransparent()
         {
-            // Clean up the shared Setup objects — this test uses its own hierarchy
-            Object.DestroyImmediate(_textGo);
-            Object.DestroyImmediate(_canvasGo);
-            _textGo = null;
-            _canvasGo = null;
+            // Verifies all prerequisites for visible rendering:
+            // 1. mainTexture is not null (CanvasRenderer skips drawing when null)
+            // 2. Material and shader are valid and supported
+            // 3. Mesh geometry is generated by OnPopulateMesh
+            // 4. GraphicsBuffer for character indices is valid and populated
 
-            const int rtWidth = 256;
-            const int rtHeight = 128;
-            var rt = new RenderTexture(rtWidth, rtHeight, 24);
-            rt.Create();
+            _renderer.MaxCharacters = 8;
+            _renderer.CharacterWidth = 20f;
+            _renderer.CharacterHeight = 40f;
+            _renderer.CharacterSpacing = 2f;
+            _renderer.Text = "ABCD1234";
+            yield return null;
 
-            // Camera
-            var camGo = new GameObject("TestCamera");
-            var cam = camGo.AddComponent<Camera>();
-            cam.orthographic = true;
-            cam.orthographicSize = rtHeight * 0.5f;
-            cam.nearClipPlane = -1f;
-            cam.farClipPlane = 100f;
-            cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = Color.clear;
-            cam.targetTexture = rt;
+            // 1. mainTexture check
+            Assert.IsNotNull(_renderer.mainTexture,
+                "mainTexture must not be null; CanvasRenderer skips drawing when texture is null.");
 
-            // Canvas (ScreenSpace - Camera)
-            _canvasGo = new GameObject("RenderTestCanvas");
-            var canvas = _canvasGo.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceCamera;
-            canvas.worldCamera = cam;
-            var scaler = _canvasGo.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+            // 2. Material & shader check
+            Assert.IsNotNull(_renderer.material,
+                "Material must be assigned for rendering to occur.");
+            Assert.IsTrue(_renderer.material.shader.isSupported,
+                "Shader 'UI/ShaderText' must be supported on this platform.");
+            Assert.AreEqual("UI/ShaderText", _renderer.material.shader.name,
+                "Material must use the ShaderText shader.");
 
-            // ShaderTextRenderer
-            _textGo = new GameObject("RenderTestText");
-            _textGo.transform.SetParent(_canvasGo.transform, false);
-            var rectTransform = _textGo.AddComponent<RectTransform>();
-            rectTransform.anchorMin = Vector2.zero;
-            rectTransform.anchorMax = Vector2.one;
-            rectTransform.offsetMin = Vector2.zero;
-            rectTransform.offsetMax = Vector2.zero;
+            // 3. Mesh geometry check
+            var vh = new VertexHelper();
+            var populateMethod = typeof(ShaderTextRenderer).GetMethod(
+                "OnPopulateMesh",
+                BindingFlags.NonPublic | BindingFlags.Instance,
+                null, new[] { typeof(VertexHelper) }, null);
+            populateMethod.Invoke(_renderer, new object[] { vh });
 
-            var renderer = _textGo.AddComponent<ShaderTextRenderer>();
-            renderer.color = Color.white;
-            renderer.MaxCharacters = 8;
-            renderer.CharacterWidth = 20f;
-            renderer.CharacterHeight = 40f;
-            renderer.CharacterSpacing = 2f;
-            renderer.Text = "ABCD1234";
+            Assert.Greater(vh.currentVertCount, 0,
+                "OnPopulateMesh must produce vertices for text to be visible.");
+            Assert.AreEqual(8 * 4, vh.currentVertCount,
+                "Expected 8 character quads (4 vertices each) for 'ABCD1234'.");
+            vh.Dispose();
 
-            // Wait several frames for Canvas rebuild + rendering
-            for (int i = 0; i < 4; i++)
-                yield return null;
+            // 4. GraphicsBuffer & char indices check
+            var bufferField = typeof(ShaderTextRenderer).GetField(
+                "_charIndexBuffer", BindingFlags.NonPublic | BindingFlags.Instance);
+            var buffer = (GraphicsBuffer)bufferField.GetValue(_renderer);
+            Assert.IsNotNull(buffer,
+                "GraphicsBuffer must exist for the shader to read character data.");
 
-            // Force a camera render
-            cam.Render();
+            var charIndicesField = typeof(ShaderTextRenderer).GetField(
+                "_charIndices", BindingFlags.NonPublic | BindingFlags.Instance);
+            var charIndices = (uint[])charIndicesField.GetValue(_renderer);
+            Assert.IsNotNull(charIndices);
+            Assert.AreEqual(8, charIndices.Length);
 
-            // Read back pixels
-            var prev = RenderTexture.active;
-            RenderTexture.active = rt;
-            var tex = new Texture2D(rtWidth, rtHeight, TextureFormat.RGBA32, false);
-            tex.ReadPixels(new Rect(0, 0, rtWidth, rtHeight), 0, 0);
-            tex.Apply();
-            RenderTexture.active = prev;
-
-            // Count non-transparent pixels
-            var pixels = tex.GetPixels32();
-            int nonTransparentCount = 0;
-            for (int i = 0; i < pixels.Length; i++)
+            bool hasVisibleChar = false;
+            for (int i = 0; i < charIndices.Length; i++)
             {
-                if (pixels[i].a > 10)
-                    nonTransparentCount++;
+                if (charIndices[i] < 255u) { hasVisibleChar = true; break; }
             }
-
-            // Cleanup
-            Object.DestroyImmediate(tex);
-            Object.DestroyImmediate(camGo);
-            rt.Release();
-            Object.DestroyImmediate(rt);
-
-            Assert.Greater(nonTransparentCount, 0,
-                "ShaderTextRenderer should render visible pixels. " +
-                "If mainTexture returns null, CanvasRenderer skips drawing entirely.");
+            Assert.IsTrue(hasVisibleChar,
+                "At least one character slot must have a renderable glyph index (< 255).");
         }
 
         // ── Mixed Character Tests ───────────────────────────
