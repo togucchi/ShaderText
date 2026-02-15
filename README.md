@@ -3,6 +3,8 @@
 [![Unity 2021.3+](https://img.shields.io/badge/Unity-2021.3%2B-black.svg)](https://unity.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+**[日本語版はこちら](README_JP.md)**
+
 Texture-free text rendering for Unity UI using in-shader bitmap fonts.
 Designed for debug overlays with **zero mesh rebuild** on text updates.
 
