@@ -51,14 +51,18 @@ Clone or download this repository and copy the `Packages/com.toguchi.shadertext`
 
 1. Create a **Canvas** in your scene (if you don't have one already).
 2. Add an empty **GameObject** under the Canvas.
-3. Add the **Shader Text Renderer** component (`Add Component > UI > Shader Text Renderer`).
-4. Set the **Text** field in the Inspector.
+3. Add a **Canvas Renderer** component to the GameObject.
+4. Add the **Shader Text Renderer** component (`Add Component > UI > Shader Text Renderer`).
+5. Set the **Text** field in the Inspector.
+
+> **Note:** A `CanvasRenderer` component is required on the same GameObject for `ShaderTextRenderer` to render correctly.
 
 ### From Script
 
 ```csharp
 using ShaderText;
 
+gameObject.AddComponent<CanvasRenderer>();
 var renderer = gameObject.AddComponent<ShaderTextRenderer>();
 renderer.MaxCharacters = 16;
 renderer.Text = "FPS:60 16.7MS";

@@ -49,14 +49,18 @@ https://github.com/toguchi/ShaderText.git?path=Packages/com.toguchi.shadertext
 
 1. シーンに **Canvas** を作成します（まだない場合）。
 2. Canvas の下に空の **GameObject** を追加します。
-3. **Shader Text Renderer** コンポーネントを追加します（`Add Component > UI > Shader Text Renderer`）。
-4. Inspector で **Text** フィールドを設定します。
+3. **Canvas Renderer** コンポーネントを追加します。
+4. **Shader Text Renderer** コンポーネントを追加します（`Add Component > UI > Shader Text Renderer`）。
+5. Inspector で **Text** フィールドを設定します。
+
+> **注意:** `ShaderTextRenderer` が正しく描画されるには、同じ GameObject に `CanvasRenderer` コンポーネントが必要です。
 
 ### スクリプトから使用
 
 ```csharp
 using ShaderText;
 
+gameObject.AddComponent<CanvasRenderer>();
 var renderer = gameObject.AddComponent<ShaderTextRenderer>();
 renderer.MaxCharacters = 16;
 renderer.Text = "FPS:60 16.7MS";
