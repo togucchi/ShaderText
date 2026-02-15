@@ -560,5 +560,188 @@ namespace ShaderText.Tests
             Assert.AreEqual(12u, charIndices[2]);
             Assert.AreEqual(13u, charIndices[3]);
         }
+
+        // ── Zero-GC API Tests ───────────────────────────────
+
+        private uint[] GetCharIndices()
+        {
+            var field = typeof(ShaderTextRenderer).GetField(
+                "_charIndices", BindingFlags.NonPublic | BindingFlags.Instance);
+            return (uint[])field.GetValue(_renderer);
+        }
+
+        [UnityTest]
+        public IEnumerator SetChar_WritesCorrectIndex()
+        {
+            _renderer.MaxCharacters = 4;
+            yield return null;
+
+            _renderer.SetChar(0, 'A');
+            _renderer.SetChar(1, '5');
+            _renderer.SetChar(2, '-');
+
+            var indices = GetCharIndices();
+            Assert.AreEqual(10u, indices[0], "A=10");
+            Assert.AreEqual(5u, indices[1], "5=5");
+            Assert.AreEqual(39u, indices[2], "-=39");
+        }
+
+        [UnityTest]
+        public IEnumerator Apply_UploadsBufferToGPU()
+        {
+            _renderer.MaxCharacters = 4;
+            yield return null;
+
+            _renderer.SetChar(0, 'B');
+            _renderer.Apply();
+
+            // After Apply, _bufferDirty should be false (verified by calling Apply again with no change)
+            var dirtyField = typeof(ShaderTextRenderer).GetField(
+                "_bufferDirty", BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.IsFalse((bool)dirtyField.GetValue(_renderer), "_bufferDirty should be false after Apply");
+
+            // Verify buffer content
+            var indices = GetCharIndices();
+            Assert.AreEqual(11u, indices[0], "B=11");
+        }
+
+        [UnityTest]
+        public IEnumerator ClearChars_FillsWithBlank()
+        {
+            _renderer.MaxCharacters = 8;
+            yield return null;
+
+            _renderer.SetChar(0, 'A');
+            _renderer.SetChar(1, 'B');
+            _renderer.SetChar(2, 'C');
+            _renderer.ClearChars(1);
+
+            var indices = GetCharIndices();
+            Assert.AreEqual(10u, indices[0], "Slot 0 should remain A=10");
+            for (int i = 1; i < 8; i++)
+                Assert.AreEqual(255u, indices[i], $"Slot {i} should be 255 (blank)");
+        }
+
+        [UnityTest]
+        public IEnumerator WriteInt_PositiveNumber()
+        {
+            _renderer.MaxCharacters = 16;
+            yield return null;
+
+            int written = _renderer.WriteInt(42, 0);
+            _renderer.Apply();
+
+            var indices = GetCharIndices();
+            Assert.AreEqual(2, written);
+            Assert.AreEqual(4u, indices[0], "4");
+            Assert.AreEqual(2u, indices[1], "2");
+        }
+
+        [UnityTest]
+        public IEnumerator WriteInt_NegativeNumber()
+        {
+            _renderer.MaxCharacters = 16;
+            yield return null;
+
+            int written = _renderer.WriteInt(-42, 3);
+            _renderer.Apply();
+
+            var indices = GetCharIndices();
+            Assert.AreEqual(3, written);
+            Assert.AreEqual(39u, indices[3], "-=39");
+            Assert.AreEqual(4u, indices[4], "4");
+            Assert.AreEqual(2u, indices[5], "2");
+        }
+
+        [UnityTest]
+        public IEnumerator WriteInt_Zero()
+        {
+            _renderer.MaxCharacters = 16;
+            yield return null;
+
+            int written = _renderer.WriteInt(0, 0);
+            _renderer.Apply();
+
+            var indices = GetCharIndices();
+            Assert.AreEqual(1, written);
+            Assert.AreEqual(0u, indices[0], "0");
+        }
+
+        [UnityTest]
+        public IEnumerator WriteFloat_BasicValue()
+        {
+            _renderer.MaxCharacters = 16;
+            yield return null;
+
+            int written = _renderer.WriteFloat(3.14f, 1, 0);
+            _renderer.Apply();
+
+            var indices = GetCharIndices();
+            // "3.1" = 3 chars
+            Assert.AreEqual(3, written);
+            Assert.AreEqual(3u, indices[0], "3");
+            Assert.AreEqual(38u, indices[1], ".=38");
+            Assert.AreEqual(1u, indices[2], "1");
+        }
+
+        [UnityTest]
+        public IEnumerator WriteFloat_NegativeValue()
+        {
+            _renderer.MaxCharacters = 16;
+            yield return null;
+
+            int written = _renderer.WriteFloat(-7.5f, 1, 0);
+            _renderer.Apply();
+
+            var indices = GetCharIndices();
+            // "-7.5" = 4 chars
+            Assert.AreEqual(4, written);
+            Assert.AreEqual(39u, indices[0], "-=39");
+            Assert.AreEqual(7u, indices[1], "7");
+            Assert.AreEqual(38u, indices[2], ".=38");
+            Assert.AreEqual(5u, indices[3], "5");
+        }
+
+        [UnityTest]
+        public IEnumerator WriteString_WritesChars()
+        {
+            _renderer.MaxCharacters = 16;
+            yield return null;
+
+            int written = _renderer.WriteString("FPS:", 0);
+            _renderer.Apply();
+
+            var indices = GetCharIndices();
+            Assert.AreEqual(4, written);
+            Assert.AreEqual(15u, indices[0], "F=15");
+            Assert.AreEqual(25u, indices[1], "P=25");
+            Assert.AreEqual(28u, indices[2], "S=28");
+            Assert.AreEqual(37u, indices[3], ":=37");
+        }
+
+        [UnityTest]
+        public IEnumerator WriteInt_ReturnsCharCount()
+        {
+            _renderer.MaxCharacters = 16;
+            yield return null;
+
+            Assert.AreEqual(1, _renderer.WriteInt(0, 0));
+            Assert.AreEqual(1, _renderer.WriteInt(5, 0));
+            Assert.AreEqual(2, _renderer.WriteInt(42, 0));
+            Assert.AreEqual(3, _renderer.WriteInt(100, 0));
+            Assert.AreEqual(3, _renderer.WriteInt(-99, 0));
+        }
+
+        [UnityTest]
+        public IEnumerator SetChar_OutOfRange_NoError()
+        {
+            _renderer.MaxCharacters = 4;
+            yield return null;
+
+            // Should not throw
+            Assert.DoesNotThrow(() => _renderer.SetChar(-1, 'A'));
+            Assert.DoesNotThrow(() => _renderer.SetChar(4, 'A'));
+            Assert.DoesNotThrow(() => _renderer.SetChar(100, 'A'));
+        }
     }
 }

@@ -20,6 +20,7 @@ namespace ShaderText
         private GraphicsBuffer _charIndexBuffer;
         private uint[] _charIndices;
         private string _appliedText;
+        private bool _bufferDirty;
 
         public string Text
         {
@@ -239,6 +240,182 @@ namespace ShaderText
                 case '-': return 39u;
                 default:  return 255u;
             }
+        }
+
+        // ── Zero-GC API ─────────────────────────────────────
+
+        /// <summary>
+        /// Set a single character at the given slot. Does not upload to GPU.
+        /// </summary>
+        public void SetChar(int index, char c)
+        {
+            if (_charIndices == null || (uint)index >= (uint)_charIndices.Length)
+                return;
+            _charIndices[index] = CharToIndex(c);
+            _bufferDirty = true;
+        }
+
+        /// <summary>
+        /// Fill slots from <paramref name="startIndex"/> onward with blank (255).
+        /// </summary>
+        public void ClearChars(int startIndex = 0)
+        {
+            if (_charIndices == null) return;
+            for (int i = Mathf.Max(0, startIndex); i < _charIndices.Length; i++)
+                _charIndices[i] = 255u;
+            _bufferDirty = true;
+        }
+
+        /// <summary>
+        /// Upload buffer changes to the GPU.
+        /// </summary>
+        public void Apply()
+        {
+            if (!_bufferDirty || _charIndices == null || _charIndexBuffer == null)
+                return;
+            _charIndexBuffer.SetData(_charIndices);
+            _bufferDirty = false;
+            _appliedText = null;
+        }
+
+        /// <summary>
+        /// Write an integer without string allocation. Returns the number of characters written.
+        /// </summary>
+        public int WriteInt(int value, int startIndex = 0)
+        {
+            if (_charIndices == null) return 0;
+
+            int pos = startIndex;
+            int len = _charIndices.Length;
+
+            if (value < 0)
+            {
+                if ((uint)pos < (uint)len)
+                    _charIndices[pos] = CharToIndex('-');
+                pos++;
+                // Handle int.MinValue: -(int.MinValue) overflows, use long
+                long abs = -(long)value;
+                pos = WritePositiveLong(abs, pos, len);
+            }
+            else if (value == 0)
+            {
+                if ((uint)pos < (uint)len)
+                    _charIndices[pos] = CharToIndex('0');
+                pos++;
+            }
+            else
+            {
+                pos = WritePositiveLong(value, pos, len);
+            }
+
+            _bufferDirty = true;
+            return pos - startIndex;
+        }
+
+        /// <summary>
+        /// Write a float without string allocation. Returns the number of characters written.
+        /// </summary>
+        public int WriteFloat(float value, int decimals, int startIndex = 0)
+        {
+            if (_charIndices == null) return 0;
+
+            int pos = startIndex;
+            int len = _charIndices.Length;
+
+            if (value < 0f)
+            {
+                if ((uint)pos < (uint)len)
+                    _charIndices[pos] = CharToIndex('-');
+                pos++;
+                value = -value;
+            }
+
+            // Multiply to get integer representation with desired decimal places
+            long multiplier = 1;
+            for (int d = 0; d < decimals; d++)
+                multiplier *= 10;
+
+            long scaled = (long)(value * multiplier + 0.5f);
+            long intPart = scaled / multiplier;
+            long fracPart = scaled % multiplier;
+
+            // Write integer part
+            if (intPart == 0)
+            {
+                if ((uint)pos < (uint)len)
+                    _charIndices[pos] = CharToIndex('0');
+                pos++;
+            }
+            else
+            {
+                pos = WritePositiveLong(intPart, pos, len);
+            }
+
+            // Write decimal point and fractional part
+            if (decimals > 0)
+            {
+                if ((uint)pos < (uint)len)
+                    _charIndices[pos] = CharToIndex('.');
+                pos++;
+
+                // Write fractional digits with leading zeros
+                for (int d = decimals - 1; d >= 0; d--)
+                {
+                    long divisor = 1;
+                    for (int p = 0; p < d; p++)
+                        divisor *= 10;
+                    long digit = (fracPart / divisor) % 10;
+                    if ((uint)pos < (uint)len)
+                        _charIndices[pos] = (uint)(digit);
+                    pos++;
+                }
+            }
+
+            _bufferDirty = true;
+            return pos - startIndex;
+        }
+
+        /// <summary>
+        /// Write each character of a string. Returns the number of characters written.
+        /// </summary>
+        public int WriteString(string text, int startIndex = 0)
+        {
+            if (_charIndices == null || text == null) return 0;
+
+            int len = _charIndices.Length;
+            int count = text.Length;
+            for (int i = 0; i < count; i++)
+            {
+                int idx = startIndex + i;
+                if ((uint)idx >= (uint)len) break;
+                _charIndices[idx] = CharToIndex(text[i]);
+            }
+
+            _bufferDirty = true;
+            return count;
+        }
+
+        private int WritePositiveLong(long value, int pos, int bufferLen)
+        {
+            // Count digits
+            int digitCount = 0;
+            long tmp = value;
+            while (tmp > 0)
+            {
+                digitCount++;
+                tmp /= 10;
+            }
+
+            // Write digits in reverse order
+            int endPos = pos + digitCount;
+            for (int i = endPos - 1; i >= pos; i--)
+            {
+                if ((uint)i < (uint)bufferLen)
+                    _charIndices[i] = (uint)(value % 10);
+                value /= 10;
+            }
+
+            return endPos;
         }
     }
 }
