@@ -15,6 +15,7 @@ namespace ShaderText
         [SerializeField] private float _characterHeight = 24f;
         [SerializeField] private float _characterSpacing = 2f;
         [SerializeField] private string _text = "";
+        [SerializeField] private TextAnchor _alignment = TextAnchor.UpperLeft;
 
         private Material _runtimeMaterial;
         private GraphicsBuffer _charIndexBuffer;
@@ -80,6 +81,17 @@ namespace ShaderText
             }
         }
 
+        public TextAnchor Alignment
+        {
+            get => _alignment;
+            set
+            {
+                if (_alignment == value) return;
+                _alignment = value;
+                SetVerticesDirty();
+            }
+        }
+
         public override Texture mainTexture => Texture2D.whiteTexture;
 
         protected override void Awake()
@@ -133,11 +145,65 @@ namespace ShaderText
             var rect = GetPixelAdjustedRect();
             float advance = _characterWidth + _characterSpacing;
 
+            // Count actual content characters (non-blank slots from the end)
+            int contentCount = 0;
+            if (_charIndices != null)
+            {
+                for (int i = Mathf.Min(_maxCharacters, _charIndices.Length) - 1; i >= 0; i--)
+                {
+                    if (_charIndices[i] != 255u)
+                    {
+                        contentCount = i + 1;
+                        break;
+                    }
+                }
+            }
+
+            float contentWidth = contentCount > 0 ? contentCount * advance - _characterSpacing : 0f;
+
+            // Horizontal offset
+            float offsetX;
+            switch (_alignment)
+            {
+                case TextAnchor.UpperCenter:
+                case TextAnchor.MiddleCenter:
+                case TextAnchor.LowerCenter:
+                    offsetX = (rect.width - contentWidth) / 2f;
+                    break;
+                case TextAnchor.UpperRight:
+                case TextAnchor.MiddleRight:
+                case TextAnchor.LowerRight:
+                    offsetX = rect.width - contentWidth;
+                    break;
+                default: // Left
+                    offsetX = 0f;
+                    break;
+            }
+
+            // Vertical offset
+            float offsetY;
+            switch (_alignment)
+            {
+                case TextAnchor.UpperLeft:
+                case TextAnchor.UpperCenter:
+                case TextAnchor.UpperRight:
+                    offsetY = rect.height - _characterHeight;
+                    break;
+                case TextAnchor.MiddleLeft:
+                case TextAnchor.MiddleCenter:
+                case TextAnchor.MiddleRight:
+                    offsetY = (rect.height - _characterHeight) / 2f;
+                    break;
+                default: // Lower
+                    offsetY = 0f;
+                    break;
+            }
+
             for (int i = 0; i < _maxCharacters; i++)
             {
-                float x0 = rect.xMin + i * advance;
+                float x0 = rect.xMin + offsetX + i * advance;
                 float x1 = x0 + _characterWidth;
-                float y0 = rect.yMin;
+                float y0 = rect.yMin + offsetY;
                 float y1 = y0 + _characterHeight;
 
                 // Stop if exceeding rect width
