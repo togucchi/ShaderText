@@ -15,7 +15,6 @@ Designed for debug overlays with **zero mesh rebuild** on text updates.
 - **Zero Mesh Rebuild** - Text updates only write to a GPU buffer. No vertex recalculation, no Canvas rebuild.
 - **Texture-Free** - All glyphs are encoded as bit-packed data inside the shader. No font textures or atlases needed.
 - **Unity UI Integration** - Extends `MaskableGraphic`. Works with Canvas layout, RectMask2D, and UI Mask.
-- **Anti-Aliased** - Smooth edges via `smoothstep` with screen-space derivatives (`fwidth`).
 - **Edit Mode Support** - `[ExecuteAlways]` allows preview in the Scene view without entering Play mode.
 
 ## Supported Characters
@@ -155,7 +154,7 @@ renderer.Apply();
 │  │ Fragment Shader:                             │         │
 │  │   charIndex = _CharIndices[slotIndex]        │         │
 │  │   pixel = SampleGlyph(charIndex, uv)         │         │
-│  │   alpha = smoothstep(edge, pixel)            │         │
+│  │   alpha = pixel                              │         │
 │  └─────────────────────────────────────────────┘         │
 │                                                          │
 │  Font Data: 5×7 bitmap, 35 bits per glyph (uint2)       │
@@ -164,7 +163,6 @@ renderer.Apply();
 
 1. **CPU side** converts each character to a glyph index and writes the array to a `GraphicsBuffer`.
 2. **GPU side** reads the index per character slot and samples from a hard-coded 5x7 bitmap font.
-3. Anti-aliasing is applied using `smoothstep` with `fwidth`-derived edge thresholds.
 
 ## Samples
 

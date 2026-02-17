@@ -13,7 +13,6 @@ Unity UI 向けのテクスチャ不要テキストレンダリング。シェ�
 - **メッシュ再構築ゼロ** - テキスト更新時は GPU バッファへの書き込みのみ。頂点の再計算も Canvas の再構築も不要です。
 - **テクスチャ不要** - すべてのグリフはシェーダー内にビットパックデータとしてエンコード。フォントテクスチャやアトラスは必要ありません。
 - **Unity UI 統合** - `MaskableGraphic` を継承。Canvas レイアウト、RectMask2D、UI Mask と連携します。
-- **アンチエイリアス** - スクリーンスペース微分 (`fwidth`) を用いた `smoothstep` による滑らかなエッジ。
 - **Edit Mode 対応** - `[ExecuteAlways]` により Play モードに入らずに Scene ビューでプレビュー可能。
 
 ## 対応文字
@@ -153,7 +152,7 @@ renderer.Apply();
 │  │ Fragment Shader:                             │         │
 │  │   charIndex = _CharIndices[slotIndex]        │         │
 │  │   pixel = SampleGlyph(charIndex, uv)         │         │
-│  │   alpha = smoothstep(edge, pixel)            │         │
+│  │   alpha = pixel                              │         │
 │  └─────────────────────────────────────────────┘         │
 │                                                          │
 │  フォントデータ: 5×7 ビットマップ, 1グリフ35ビット (uint2) │
@@ -162,7 +161,6 @@ renderer.Apply();
 
 1. **CPU 側** で各文字をグリフインデックスに変換し、配列を `GraphicsBuffer` に書き込みます。
 2. **GPU 側** で文字スロットごとにインデックスを読み取り、ハードコードされた 5x7 ビットマップフォントからサンプリングします。
-3. `fwidth` 由来のエッジしきい値を用いた `smoothstep` でアンチエイリアスが適用されます。
 
 ## サンプル
 

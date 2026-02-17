@@ -99,12 +99,7 @@ Shader "UI/ShaderText"
 
                 float pixel = SampleGlyph(charIndex, i.uv0);
 
-                // Anti-aliasing
-                float2 duv = fwidth(i.uv0);
-                float edge = max(duv.x * SHADER_TEXT_GLYPH_W, duv.y * SHADER_TEXT_GLYPH_H) * 0.5;
-                float alpha = smoothstep(0.5 - edge, 0.5 + edge, pixel);
-
-                fixed4 col = fixed4(i.color.rgb, i.color.a * alpha);
+                fixed4 col = fixed4(i.color.rgb, i.color.a * pixel);
 
                 // Canvas rect clipping
                 #ifdef UNITY_UI_CLIP_RECT
