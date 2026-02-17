@@ -561,6 +561,126 @@ namespace ShaderText.Tests
             Assert.AreEqual(13u, charIndices[3]);
         }
 
+        // ── Alignment Tests ──────────────────────────────────
+
+        [Test]
+        public void Alignment_SetAndGet_ReturnsAssignedValue()
+        {
+            _renderer.Alignment = TextAnchor.MiddleCenter;
+            Assert.AreEqual(TextAnchor.MiddleCenter, _renderer.Alignment);
+        }
+
+        [Test]
+        public void Alignment_DefaultIsUpperLeft()
+        {
+            Assert.AreEqual(TextAnchor.UpperLeft, _renderer.Alignment);
+        }
+
+        private static readonly MethodInfo PopulateMeshMethod =
+            typeof(ShaderTextRenderer).GetMethod(
+                "OnPopulateMesh",
+                BindingFlags.NonPublic | BindingFlags.Instance,
+                null,
+                new[] { typeof(VertexHelper) },
+                null);
+
+        private Vector3[] GetMeshVertices()
+        {
+            var vh = new VertexHelper();
+            PopulateMeshMethod.Invoke(_renderer, new object[] { vh });
+            var mesh = new Mesh();
+            vh.FillMesh(mesh);
+            var verts = mesh.vertices;
+            mesh.Clear();
+            vh.Dispose();
+            return verts;
+        }
+
+        [UnityTest]
+        public IEnumerator Alignment_Left_VerticesStartAtRectLeft()
+        {
+            var rt = _textGo.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(400f, 100f);
+            _renderer.MaxCharacters = 4;
+            _renderer.CharacterWidth = 14f;
+            _renderer.CharacterSpacing = 2f;
+            _renderer.CharacterHeight = 24f;
+            _renderer.Text = "AB";
+            _renderer.Alignment = TextAnchor.LowerLeft;
+            yield return null;
+
+            var verts = GetMeshVertices();
+            // LowerLeft: offsetX=0, offsetY=0
+            // First vertex x should be at rect.xMin (= -200)
+            Assert.AreEqual(-200f, verts[0].x, 0.5f, "Left alignment: first vertex at rect.xMin");
+            // y should be at rect.yMin (= -50)
+            Assert.AreEqual(-50f, verts[0].y, 0.5f, "Lower alignment: first vertex at rect.yMin");
+        }
+
+        [UnityTest]
+        public IEnumerator Alignment_Center_VerticesCentered()
+        {
+            var rt = _textGo.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(400f, 100f);
+            _renderer.MaxCharacters = 4;
+            _renderer.CharacterWidth = 14f;
+            _renderer.CharacterSpacing = 2f;
+            _renderer.CharacterHeight = 24f;
+            _renderer.Text = "AB";
+            _renderer.Alignment = TextAnchor.MiddleCenter;
+            yield return null;
+
+            var verts = GetMeshVertices();
+            // contentCount=2, advance=16, contentWidth = 2*16 - 2 = 30
+            // offsetX = (400 - 30) / 2 = 185
+            // offsetY = (100 - 24) / 2 = 38
+            float expectedX0 = -200f + 185f; // = -15
+            float expectedY0 = -50f + 38f;   // = -12
+            Assert.AreEqual(expectedX0, verts[0].x, 0.5f, "Center alignment: horizontal centering");
+            Assert.AreEqual(expectedY0, verts[0].y, 0.5f, "Middle alignment: vertical centering");
+        }
+
+        [UnityTest]
+        public IEnumerator Alignment_Right_VerticesEndAtRectRight()
+        {
+            var rt = _textGo.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(400f, 100f);
+            _renderer.MaxCharacters = 4;
+            _renderer.CharacterWidth = 14f;
+            _renderer.CharacterSpacing = 2f;
+            _renderer.CharacterHeight = 24f;
+            _renderer.Text = "AB";
+            _renderer.Alignment = TextAnchor.LowerRight;
+            yield return null;
+
+            var verts = GetMeshVertices();
+            // contentCount=2, advance=16, contentWidth = 30
+            // offsetX = 400 - 30 = 370
+            // Last char: x1 = -200 + 370 + 1*16 + 14 = 200 (= rect.xMax)
+            float expectedX0 = -200f + 370f; // = 170
+            Assert.AreEqual(expectedX0, verts[0].x, 0.5f, "Right alignment: content right-aligned");
+        }
+
+        [UnityTest]
+        public IEnumerator Alignment_Upper_VerticesAtTop()
+        {
+            var rt = _textGo.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(400f, 100f);
+            _renderer.MaxCharacters = 4;
+            _renderer.CharacterWidth = 14f;
+            _renderer.CharacterSpacing = 2f;
+            _renderer.CharacterHeight = 24f;
+            _renderer.Text = "AB";
+            _renderer.Alignment = TextAnchor.UpperLeft;
+            yield return null;
+
+            var verts = GetMeshVertices();
+            // offsetY = rect.height - characterHeight = 100 - 24 = 76
+            // y1 = rect.yMin + 76 + 24 = -50 + 100 = 50 (= rect.yMax)
+            float expectedY1 = 50f;
+            Assert.AreEqual(expectedY1, verts[1].y, 0.5f, "Upper alignment: top of char at rect.yMax");
+        }
+
         // ── Zero-GC API Tests ───────────────────────────────
 
         private uint[] GetCharIndices()

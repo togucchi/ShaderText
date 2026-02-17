@@ -12,6 +12,7 @@ namespace ShaderText.Editor
         private SerializedProperty _characterWidth;
         private SerializedProperty _characterHeight;
         private SerializedProperty _characterSpacing;
+        private SerializedProperty _alignment;
         private SerializedProperty _text;
         private SerializedProperty _color;
         private SerializedProperty _raycastTarget;
@@ -22,6 +23,7 @@ namespace ShaderText.Editor
             _characterWidth = serializedObject.FindProperty("_characterWidth");
             _characterHeight = serializedObject.FindProperty("_characterHeight");
             _characterSpacing = serializedObject.FindProperty("_characterSpacing");
+            _alignment = serializedObject.FindProperty("_alignment");
             _text = serializedObject.FindProperty("_text");
             _color = serializedObject.FindProperty("m_Color");
             _raycastTarget = serializedObject.FindProperty("m_RaycastTarget");
@@ -40,6 +42,7 @@ namespace ShaderText.Editor
             EditorGUILayout.PropertyField(_characterWidth, new GUIContent("Char Width"));
             EditorGUILayout.PropertyField(_characterHeight, new GUIContent("Char Height"));
             EditorGUILayout.PropertyField(_characterSpacing, new GUIContent("Char Spacing"));
+            EditorGUILayout.PropertyField(_alignment, new GUIContent("Alignment"));
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Appearance", EditorStyles.boldLabel);
